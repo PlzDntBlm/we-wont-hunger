@@ -21,4 +21,14 @@ public class AgentNeeds : MonoBehaviour
         // We use Mathf.Max to ensure hunger doesn't drop below zero.
         _currentHunger = Mathf.Max(0, _currentHunger - _hungerDecayRate * Time.deltaTime);
     }
+    public bool IsHungry(float threshold)
+    {
+        return _currentHunger < threshold;
+    }
+
+    public void Eat(float foodAmount)
+    {
+        _currentHunger += foodAmount;
+        _currentHunger = Mathf.Min(_currentHunger, _maxHunger);
+    }
 }
