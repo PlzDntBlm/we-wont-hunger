@@ -3,24 +3,27 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Manages the player's control over the RTS camera, including zooming, panning, and orbiting.
+/// Manages player input for controlling the RTS camera.
 /// </summary>
 public class CameraController : MonoBehaviour
 {
     [Header("References")]
-    [Tooltip("The CinemachineCamera that this script will control.")]
     [SerializeField] private CinemachineCamera _virtualCamera;
 
     [Header("Zoom Settings")]
     [Tooltip("How sensitive the zoom is to the mouse scroll wheel.")]
     [SerializeField] private float _zoomSensitivity = 0.1f;
-    [Tooltip("The closest the camera can get to its target.")]
+    [Tooltip("How quickly the camera smoothes to the target zoom distance. Smaller is faster.")]
+    [SerializeField] private float _zoomDampening = 0.2f;
     [SerializeField] private float _minZoomDistance = 5f;
-    [Tooltip("The farthest the camera can get from its target.")]
     [SerializeField] private float _maxZoomDistance = 50f;
 
     private GameControls _gameControls;
     private CinemachineThirdPersonFollow _thirdPersonFollow;
+
+    // Variables for dampened zoom
+    private float _currentTargetDistance;
+    private float _zoomVelocity; // Required by SmoothDamp
 
     private void Awake()
     {
@@ -28,42 +31,47 @@ public class CameraController : MonoBehaviour
         if (_virtualCamera != null)
         {
             _thirdPersonFollow = _virtualCamera.gameObject.GetComponent<CinemachineThirdPersonFollow>();
+            // Initialize our target distance to the camera's starting distance.
+            _currentTargetDistance = _thirdPersonFollow.CameraDistance;
         }
     }
 
-    private void OnEnable()
-    {
-        _gameControls.Camera.Enable();
-    }
-
-    private void OnDisable()
-    {
-        _gameControls.Camera.Disable();
-    }
+    private void OnEnable() => _gameControls.Camera.Enable();
+    private void OnDisable() => _gameControls.Camera.Disable();
 
     private void LateUpdate()
     {
-        HandleZoom();
+        HandleZoomInput();
+        ApplyDampenedZoom();
     }
 
     /// <summary>
-    /// Reads the scroll wheel input and adjusts the camera's distance from the target.
+    /// Reads scroll input and updates the target zoom distance.
     /// </summary>
-    private void HandleZoom()
+    private void HandleZoomInput()
+    {
+        float scrollValue = _gameControls.Camera.Zoom.ReadValue<float>();
+        if (Mathf.Abs(scrollValue) < 0.1f)
+            return;
+
+        // Adjust the TARGET distance, not the actual distance.
+        _currentTargetDistance -= scrollValue * _zoomSensitivity;
+        _currentTargetDistance = Mathf.Clamp(_currentTargetDistance, _minZoomDistance, _maxZoomDistance);
+    }
+
+    /// <summary>
+    /// Smoothly interpolates the camera's actual distance towards the target distance.
+    /// </summary>
+    private void ApplyDampenedZoom()
     {
         if (_thirdPersonFollow == null)
             return;
 
-        float scrollValue = _gameControls.Camera.Zoom.ReadValue<float>();
-
-        // Ignore minor input noise to prevent accidental zooming.
-        if (Mathf.Abs(scrollValue) < 0.1f)
-        {
-            return;
-        }
-
-        // Apply zoom based on scroll input and clamp the result.
-        _thirdPersonFollow.CameraDistance -= scrollValue * _zoomSensitivity;
-        _thirdPersonFollow.CameraDistance = Mathf.Clamp(_thirdPersonFollow.CameraDistance, _minZoomDistance, _maxZoomDistance);
+        _thirdPersonFollow.CameraDistance = Mathf.SmoothDamp(
+            _thirdPersonFollow.CameraDistance,
+            _currentTargetDistance,
+            ref _zoomVelocity,
+            _zoomDampening
+        );
     }
 }
